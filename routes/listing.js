@@ -3,81 +3,31 @@ const router = express.Router() //our router object
 const Listing = require("../models/listing.js")
 const wrapAsync = require("../utils/wrapAsync.js")
 const {isLoggedIn, isOwner, validateListing} = require("../middleware.js")
+const listingController = require("../controllers/listings.js")
+const multer  = require('multer')
+const {storage} = require("../cloudConfig.js")
+const upload = multer({ storage }) //now multer will now by default save our files in cloudinary storage
 
 
-//INDEX Route
-router.get("/", wrapAsync(async (req, res) => {
-    const allListings = await Listing.find({})
-    res.render("./listings/index.ejs", {allListings})
-}))
+//using Router.route - combine the same path and in that we will keep all diff reqs like get posts put delete etc - for /
+router.route("/") //defined common route
+    .get(wrapAsync(listingController.index)) //GET - Index route
+    .post(isLoggedIn, validateListing, upload.single("listing[image]"), wrapAsync(listingController.createListing)) //POST - Create route
 
 
 //NEW ROUTE
-router.get("/new", isLoggedIn, (req, res) => {
-    res.render("./listings/new.ejs")
-})
+router.get("/new", isLoggedIn, listingController.renderNewForm)
 
 
-//SHOW Route
-router.get("/:id", wrapAsync(async (req, res) => {
-    let {id} = req.params
-    const listing = await Listing.findById(id)
-    .populate({
-        path: "reviews", 
-        populate: {
-            path: "author"
-        }
-    })
-    .populate("owner")
-    if(!listing) {
-        req.flash("error", "Listing doesn't exist!")
-        return res.redirect("/listings")
-    }   
-    console.log(listing)
-    res.render("./listings/show.ejs", {listing})
-}))
-
-
-//CREATE Route
-router.post("/", isLoggedIn, validateListing, wrapAsync(async (req, res, next) => {
-    const newListing = new Listing(req.body.listing)
-    console.log(req.user)
-    newListing.owner = req.user._id
-    await newListing.save()
-    req.flash("success", "New Listing Created!")
-    res.redirect("/listings")
-}))
+// for /:id
+router.route("/:id")
+    .get(wrapAsync(listingController.showListing)) //GET - Show route
+    .put(isLoggedIn, isOwner, validateListing, wrapAsync(listingController.updateListing)) //PUT - Update route
+    .delete(isLoggedIn, isOwner, wrapAsync(listingController.destroyListing)) //DELETE - delete route
 
 
 //EDIT Route
-router.get("/:id/edit", isLoggedIn, isOwner, wrapAsync(async (req, res) => {
-    let {id} = req.params
-    const listing = await Listing.findById(id)
-    if(!listing) {
-        req.flash("error", "Cannot edit, Listing doesn't exist!")
-        return res.redirect("/listings")
-    }
-    res.render("./listings/edit.ejs", {listing})
-}))
-
-
-//UPDATE Route
-router.put("/:id", isLoggedIn, isOwner, validateListing, wrapAsync(async (req, res) => {
-    let {id} = req.params
-    await Listing.findByIdAndUpdate(id, { ...req.body.listing })
-    req.flash("success", "Listing is Updated!")
-    res.redirect(`/listings/${id}`)
-}))
-
-
-//DELETE Route
-router.delete("/:id", isLoggedIn, isOwner, wrapAsync(async (req, res) => {
-    let {id} = req.params
-    let deletedListing = await Listing.findByIdAndDelete(id)
-    console.log(deletedListing)
-    req.flash("success", "Listing Deleted!")
-    res.redirect("/listings")
-}))
+router.get("/:id/edit", isLoggedIn, isOwner, wrapAsync(listingController.renderEditForm))
 
 
 module.exports = router
